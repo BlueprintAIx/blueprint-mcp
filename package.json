@@ -1,0 +1,31 @@
+{
+  "name": "@blueprintaix/discover-mcp",
+  "version": "0.2.0",
+  "description": "Blueprint discover mcp server",
+  "type": "module",
+  "bin": {
+    "discover-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.0",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "viem": "^2.42.1",
+    "z": "^1.0.9"
+  }
+}

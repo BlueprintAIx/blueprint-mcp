@@ -1,0 +1,140 @@
+#!/usr/bin/env node
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+    CallToolRequestSchema,
+    ListToolsRequestSchema,
+    type TextContent,
+} from "@modelcontextprotocol/sdk/types.js";
+import {
+    createPublicClient,
+    createWalletClient,
+    http,
+    type Hex,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { base } from "viem/chains";
+import { Connection, Keypair } from "@solana/web3.js";
+import bs58 from "bs58";
+
+import { EvmIntentExecutor } from "./src/evm/executor.js";
+import { SolanaIntentExecutor } from "./src/solana/executor.js";
+import { RemoteToolKit } from "./src/remote.js";
+import { LocalToolKit } from "./src/tools/index.js";
+import type { Context, Intent } from "./src/types.js";
+import { log } from "./src/utils/logger.js";
+
+const BLUEPRINT_MCP_URL = process.env.BLUEPRINT_MCP_URL ?? "https://blueprint-beta.api.sui-dev.bluefin.io/discover/mcp";
+const BLUEPRINT_API_KEY = process.env.BLUEPRINT_API_KEY;
+const EVM_PRIVATE_KEY = process.env.EVM_PRIVATE_KEY as Hex | undefined;
+
+const BASE_RPC_URL = process.env.BASE_RPC_URL ?? "https://mainnet.base.org";
+const SOLANA_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY;
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+
+if (!BLUEPRINT_API_KEY) {
+    log("Error: BLUEPRINT_API_KEY environment variable is required");
+    process.exit(1);
+}
+
+if (!EVM_PRIVATE_KEY && !SOLANA_PRIVATE_KEY) {
+    log("Error: At least one of EVM_PRIVATE_KEY or SOLANA_PRIVATE_KEY is required");
+    process.exit(1);
+}
+
+function createEvmExecutor(privateKey: Hex) {
+    const account = privateKeyToAccount(privateKey);
+    const publicClient = createPublicClient({ chain: base, transport: http(BASE_RPC_URL) });
+    const walletClient = createWalletClient({ account, chain: base, transport: http(BASE_RPC_URL) });
+    log(`EVM wallet address: ${account.address}`);
+    return { executor: EvmIntentExecutor.create(walletClient, publicClient), address: account.address };
+}
+
+function createSolanaExecutor(privateKey: string) {
+    const connection = new Connection(SOLANA_RPC_URL);
+    const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
+    log(`Solana wallet address: ${keypair.publicKey.toBase58()}`);
+    return { executor: SolanaIntentExecutor.create(connection, keypair), address: keypair.publicKey.toBase58() };
+}
+
+async function main() {
+    const evmExecutor = EVM_PRIVATE_KEY ? createEvmExecutor(EVM_PRIVATE_KEY) : null;
+    const solanaExecutor = SOLANA_PRIVATE_KEY ? createSolanaExecutor(SOLANA_PRIVATE_KEY) : null;
+
+    const context: Context = {
+        wallet: { evmAddress: evmExecutor?.address ?? '', solanaAddress: solanaExecutor?.address ?? '', suiAddress: '' },
+        executeIntent: (chainType: string, intent: Intent) => {
+            if (chainType === 'evm') {
+                if (!evmExecutor) throw new Error('EVM executor not configured. Set EVM_PRIVATE_KEY.');
+                return evmExecutor.executor.execute(intent);
+            }
+            if (chainType === 'solana') {
+                if (!solanaExecutor) throw new Error('Solana executor not configured. Set SOLANA_PRIVATE_KEY.');
+                return solanaExecutor.executor.execute(intent);
+            }
+            throw new Error(`Unsupported chain type: ${chainType}`);
+        },
+    };
+
+    const localToolKit = new LocalToolKit(context);
+
+    const remoteClient = new Client({ name: "blueprint-mcp-client", version: "1.0.0" });
+    const remoteTransport = new StreamableHTTPClientTransport(new URL(BLUEPRINT_MCP_URL), {
+        requestInit: { headers: { Authorization: `Bearer ${BLUEPRINT_API_KEY}` } },
+    });
+    await remoteClient.connect(remoteTransport);
+    const remoteToolKit = new RemoteToolKit(remoteClient);
+
+    const mcpServer = new McpServer(
+        { name: "blueprint-mcp", version: "1.0.0" },
+        { capabilities: { tools: {} } },
+    );
+
+    mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => {
+        try {
+            const [remote, local] = await Promise.all([
+                remoteToolKit.listTools(),
+                localToolKit.listTools(),
+            ]);
+            return { tools: [...remote, ...local] };
+        } catch (error) {
+            log("Failed to fetch remote tools", error);
+            return { tools: await localToolKit.listTools() };
+        }
+    });
+
+    mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        const { name, arguments: args = {} } = request.params;
+
+        if (localToolKit.has(name)) {
+            return localToolKit.call(name, args as Record<string, unknown>);
+        }
+
+        try {
+            return await remoteToolKit.call(name, args as Record<string, unknown>);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: JSON.stringify({ error: `Failed to call remote tool '${name}': ${errorMessage}` }, null, 2),
+                    } as TextContent,
+                ],
+                isError: true,
+            };
+        }
+    });
+
+    const transport = new StdioServerTransport();
+    await mcpServer.connect(transport);
+    log("Blueprint MCP server started");
+    log(`Blueprint MCP URL: ${BLUEPRINT_MCP_URL}`);
+}
+
+main().catch((error) => {
+    log("Failed to start server", error);
+    process.exit(1);
+});
