@@ -14,7 +14,7 @@ An MCP server that connects AI assistants to DeFi yield opportunities across EVM
 Add the following to your Claude Desktop configuration:
 
 **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`  
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+**Linux:** `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {

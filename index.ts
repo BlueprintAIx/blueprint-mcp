@@ -5,9 +5,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
     CallToolRequestSchema,
-    ListToolsRequestSchema,
-    type TextContent,
+    ListToolsRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
+import { Connection, Keypair } from "@solana/web3.js";
+import bs58 from "bs58";
 import {
     createPublicClient,
     createWalletClient,
@@ -16,12 +17,10 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
-import { Connection, Keypair } from "@solana/web3.js";
-import bs58 from "bs58";
 
 import { EvmIntentExecutor } from "./src/evm/executor.js";
-import { SolanaIntentExecutor } from "./src/solana/executor.js";
 import { RemoteToolKit } from "./src/remote.js";
+import { SolanaIntentExecutor } from "./src/solana/executor.js";
 import { LocalToolKit } from "./src/tools/index.js";
 import type { Context, Intent } from "./src/types.js";
 import { log } from "./src/utils/logger.js";
@@ -79,7 +78,6 @@ async function main() {
     };
 
     const localToolKit = new LocalToolKit(context);
-
     const remoteClient = new Client({ name: "blueprint-mcp-client", version: "1.0.0" });
     const remoteTransport = new StreamableHTTPClientTransport(new URL(BLUEPRINT_MCP_URL), {
         requestInit: { headers: { Authorization: `Bearer ${BLUEPRINT_API_KEY}` } },
@@ -107,22 +105,18 @@ async function main() {
 
     mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args = {} } = request.params;
-
         if (localToolKit.has(name)) {
+            log(`calling local tool '${name}' with args: ${JSON.stringify(args)}`);
             return localToolKit.call(name, args as Record<string, unknown>);
         }
 
         try {
+            log(`calling remote tool '${name}' with args: ${JSON.stringify(args)}`);
             return await remoteToolKit.call(name, args as Record<string, unknown>);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify({ error: `Failed to call remote tool '${name}': ${errorMessage}` }, null, 2),
-                    } as TextContent,
-                ],
+                content: [{ type: "text", text: JSON.stringify({ error: `error calling remote tool '${name}': ${errorMessage}` }) }],
                 isError: true,
             };
         }
@@ -135,6 +129,6 @@ async function main() {
 }
 
 main().catch((error) => {
-    log("Failed to start server", error);
+    log("error starting server", error);
     process.exit(1);
 });
