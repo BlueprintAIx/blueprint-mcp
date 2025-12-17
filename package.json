@@ -1,10 +1,10 @@
 {
-  "name": "@blueprintaix/discover-mcp",
+  "name": "@blueprintaix/blueprint-mcp",
   "version": "0.2.0",
-  "description": "Blueprint discover mcp server",
+  "description": "Blueprint mcp server",
   "type": "module",
   "bin": {
-    "discover-mcp": "./dist/index.js"
+    "blueprint-mcp": "./dist/index.js"
   },
   "files": [
     "dist"

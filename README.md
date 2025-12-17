@@ -1,4 +1,4 @@
-# @blueprintaix/discover-mcp
+# @blueprintaix/blueprint-mcp
 
 An MCP server that connects AI assistants to DeFi yield opportunities across EVM and Solana chains. Discover, evaluate, and execute yield strategies through natural conversation—with transactions signed locally on your machine.
 
@@ -21,7 +21,7 @@ Add the following to your Claude Desktop configuration:
   "mcpServers": {
     "blueprint": {
       "command": "npx",
-      "args": ["-y", "@blueprintaix/discover-mcp"],
+      "args": ["-y", "@blueprintaix/blueprint-mcp"],
       "env": {
         "BLUEPRINT_API_KEY": "<your-api-key>",
         "EVM_PRIVATE_KEY": "<your-evm-private-key>",
