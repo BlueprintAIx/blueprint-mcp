@@ -36,7 +36,7 @@ Add the following to your Claude Desktop configuration:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `BLUEPRINT_API_KEY` | Yes | API key for Blueprint services |
+| `BLUEPRINT_API_KEY` | No | API key for Blueprint services (see below for x402 fallback) |
 | `EVM_PRIVATE_KEY` | One required | Private key for EVM transactions |
 | `SOLANA_PRIVATE_KEY` | One required | Private key for Solana transactions (base58) |
 | `BASE_RPC_URL` | No | Custom Base RPC endpoint |
@@ -44,15 +44,21 @@ Add the following to your Claude Desktop configuration:
 
 > At least one of `EVM_PRIVATE_KEY` or `SOLANA_PRIVATE_KEY` must be provided.
 
+### x402 Payment Fallback
+
+If no `BLUEPRINT_API_KEY` is provided, the MCP SDK will automatically fall back to using [x402](https://www.x402.org/) for making payments to call tools. Payments are made on **Base** using **USDC**.
+
+When using x402 payments, `EVM_PRIVATE_KEY` is required to sign the payment transactions.
+
 ## Get an API Key
 
-Contact **meet@emberlabs.io** to request a Blueprint API key.
+Contact **meet@emberlabs.io** to request a Blueprint API key, or use x402 payments as described above.
 
 ## Troubleshooting
 
 **Server doesnt start?** Check the following:
 
-1. **Missing API key** — Ensure `BLUEPRINT_API_KEY` is set in your config
+1. **Missing private key for x402** — If using x402 payments (no `BLUEPRINT_API_KEY`), ensure `EVM_PRIVATE_KEY` is set
 2. **Invalid private key format:**
    - `EVM_PRIVATE_KEY` must start with `0x` (66 characters total)
    - `SOLANA_PRIVATE_KEY` must be base58-encoded (~88 characters)
