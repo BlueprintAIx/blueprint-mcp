@@ -17,6 +17,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
+import { createSigner, wrapFetchWithPayment } from "x402-fetch";
 import { z } from "zod";
 
 import { EvmIntentExecutor } from "./src/evm/executor.js";
@@ -27,15 +28,18 @@ import type { Context, Intent } from "./src/types.js";
 import { log } from "./src/utils/logger.js";
 
 const envSchema = z.object({
-    BLUEPRINT_API_KEY: z.string().min(1, 'BLUEPRINT_API_KEY is required').transform(s => s.trim()),
+    BLUEPRINT_API_KEY: z.string().optional().transform(s => s?.trim()),
     BLUEPRINT_MCP_URL: z.string().default('https://blueprint-beta.api.sui-dev.bluefin.io/discover/mcp'),
-    EVM_PRIVATE_KEY: z.string().transform(s => s.trim()).optional(),
+    EVM_PRIVATE_KEY: z.string().transform(s => s.trim()).optional().transform(s => s && !s.startsWith('0x') ? `0x${s}` : s),
     BASE_RPC_URL: z.string().default('https://mainnet.base.org'),
     SOLANA_PRIVATE_KEY: z.string().transform(s => s.trim()).optional(),
     SOLANA_RPC_URL: z.string().default('https://api.mainnet-beta.solana.com'),
 }).refine(
     data => data.EVM_PRIVATE_KEY || data.SOLANA_PRIVATE_KEY,
     { message: 'At least one of EVM_PRIVATE_KEY or SOLANA_PRIVATE_KEY is required' }
+).refine(
+    data => data.BLUEPRINT_API_KEY || data.EVM_PRIVATE_KEY,
+    { message: 'EVM_PRIVATE_KEY is required when BLUEPRINT_API_KEY is not provided (needed for x402 payments)' }
 );
 
 const env = envSchema.parse(process.env);
@@ -53,6 +57,34 @@ function createSolanaExecutor(privateKey: string) {
     const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
     log(`Solana wallet address: ${keypair.publicKey.toBase58()}`);
     return { executor: SolanaIntentExecutor.create(connection, keypair), address: keypair.publicKey.toBase58() };
+}
+
+async function createRemoteTransport(): Promise<StreamableHTTPClientTransport> {
+    const acceptHeader = 'application/json, text/event-stream';
+
+    if (env.BLUEPRINT_API_KEY) {
+        return new StreamableHTTPClientTransport(new URL(env.BLUEPRINT_MCP_URL), {
+            requestInit: {
+                headers: {
+                    Authorization: `Bearer ${env.BLUEPRINT_API_KEY}`,
+                    Accept: acceptHeader,
+                },
+            },
+        });
+    }
+
+    log("no api key provided, using x402 to make tool calls!!!");
+    const signer = await createSigner('base', env.EVM_PRIVATE_KEY as Hex);
+    const fetchWithHeaders = (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const headers = new Headers(init?.headers);
+        headers.set('Accept', acceptHeader);
+        headers.set('Content-Type', 'application/json');
+        return fetch(input, { ...init, headers });
+    };
+
+    return new StreamableHTTPClientTransport(new URL(env.BLUEPRINT_MCP_URL), {
+        fetch: wrapFetchWithPayment(fetchWithHeaders as typeof fetch, signer),
+    });
 }
 
 async function main() {
@@ -76,9 +108,7 @@ async function main() {
 
     const localToolKit = new LocalToolKit(context);
     const remoteClient = new Client({ name: "blueprint-mcp-client", version: "1.0.0" });
-    const remoteTransport = new StreamableHTTPClientTransport(new URL(env.BLUEPRINT_MCP_URL), {
-        requestInit: { headers: { Authorization: `Bearer ${env.BLUEPRINT_API_KEY}` } },
-    });
+    const remoteTransport = await createRemoteTransport();
     await remoteClient.connect(remoteTransport);
     const remoteToolKit = new RemoteToolKit(remoteClient);
 
