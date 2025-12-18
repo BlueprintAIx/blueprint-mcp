@@ -59,8 +59,8 @@ function createSolanaExecutor(privateKey: string) {
 }
 
 async function main() {
-    const evmExecutor = EVM_PRIVATE_KEY ? createEvmExecutor(EVM_PRIVATE_KEY) : null;
-    const solanaExecutor = SOLANA_PRIVATE_KEY ? createSolanaExecutor(SOLANA_PRIVATE_KEY) : null;
+    const evmExecutor = EVM_PRIVATE_KEY ? createEvmExecutor(EVM_PRIVATE_KEY.trim() as `0x${string}`) : null;
+    const solanaExecutor = SOLANA_PRIVATE_KEY ? createSolanaExecutor(SOLANA_PRIVATE_KEY.trim()) : null;
 
     const context: Context = {
         wallet: { evmAddress: evmExecutor?.address ?? '', solanaAddress: solanaExecutor?.address ?? '', suiAddress: '' },
