@@ -1,6 +1,6 @@
 {
   "name": "@blueprintaix/blueprint-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Blueprint mcp server",
   "type": "module",
   "bin": {
@@ -26,6 +26,6 @@
     "@solana/web3.js": "^1.98.4",
     "bs58": "^6.0.0",
     "viem": "^2.42.1",
-    "z": "^1.0.9"
+    "zod": "^4.2.1"
   }
 }
