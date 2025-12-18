@@ -48,6 +48,22 @@ Add the following to your Claude Desktop configuration:
 
 Contact **meet@emberlabs.io** to request a Blueprint API key.
 
+## Troubleshooting
+
+**Server doesnt start?** Check the following:
+
+1. **Missing API key** — Ensure `BLUEPRINT_API_KEY` is set in your config
+2. **Invalid private key format:**
+   - `EVM_PRIVATE_KEY` must start with `0x` (66 characters total)
+   - `SOLANA_PRIVATE_KEY` must be base58-encoded (~88 characters)
+3. **Cached package issue** — Clear the npx cache and restart:
+   ```bash
+   rm -rf ~/.npm/_npx
+   ```
+
+**Still stuck?** Check the MCP logs in Claude Desktop (~/Library/Logs/Claude/ mcp-server-bp.log)
+
+
 ## License
 
 MIT
